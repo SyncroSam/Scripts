@@ -824,12 +824,11 @@ function New-PsSession([Parameter(Mandatory=$true)][scriptblock]$command, [strin
     if((Is-Installed conemu) -and !$native)
     {
         # -new_console is a conemu command.  
-        invoke-expression "powershell -new_console -Command { $sb }"
-
+        invoke-expression "powershell -new_console -noexit -Command { $sb }"
     }
     else{
         # for non conemu environments, to open in a new ps session use:
-        invoke-expression "cmd /c start powershell -Command { $sb }"
+        Start-Process powershell -ArgumentList "-noexit -Command $sb "
     }
 }
 

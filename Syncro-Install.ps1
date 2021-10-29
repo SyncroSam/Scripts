@@ -178,11 +178,11 @@
     {
         Restart-ScriptInAdmin
     }
-
-    Syncro-Status "Installing Chocolatey and required git packages"
     
     if(-not(Get-Command "choco" -ErrorAction SilentlyContinue))
     {
+        Syncro-Status "Installing Chocolatey and required git packages"
+
         # install chocolatey
         Set-ExecutionPolicy Bypass -Scope Process -Force; [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072; iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
     }
@@ -218,6 +218,8 @@
 
     if(!($state.IsSshSet))
     {
+        Syncro-Status "Setting up SSH keys for git."
+
         # important! Ensure the user has set up their SSH keys
 
         Write-Host "*******************************************************************************"
@@ -229,7 +231,7 @@
         do{
             Write-Host "Would you like to go through Pageant key setup (including startup and PATH)?"
             $setupPageant = (Read-Host "(If you would like to set up ssh manually, type [n]) [y/n]").Trim()
-        } while(-not ($setupPageant -match '^[yn]$'))
+        } while(-not($setupPageant -match '^[yn]$'))
         
         if($setupPageant -ne "y")
         {
@@ -238,7 +240,12 @@
         else{
             Set-PageantStartup
             $pageantLink = Join-Path ([Environment]::GetFolderPath('Startup')) "pageant.lnk"
-            invoke-item $pageantLink
+            
+            do{
+                invoke-item $pageantLink
+                Write-Host "Waiting for pageant to load.  If your key requires a passphrase, enter it when the prompt pops up."
+                $ready = (Read-Host "Check your task tray for the icon and verify that your key is loaded. Did Pageant load properly?[y/n]").Trim()
+            } while ($ready -ne 'y')
         }
         
         if($LASTEXITCODE)
@@ -254,6 +261,8 @@
     # create git workspace
     if(!($state.IsGitWorkspacePathSet))
     {
+        Syncro-Status "Setting up git workspace."
+
         Write-Host
         do{
             $useDefaultGitFolder = (Read-Host "Use the default workspace directory for git repositories? ($($state.GitWorkspacePath))? [y/n]").Trim()
@@ -290,6 +299,8 @@
     # clone the repositories
     if(!($state.IsRepositoriesCloned))
     {
+        Syncro-Status "Fetching required repositories."
+
         cd $state.GitWorkspacePath
         plink.exe -agent -v git@github.com
         git clone --recurse-submodules git@github.com:SyncroSam/Scripts.git --progress
@@ -310,7 +321,9 @@
     # set up $profile
     if(!($state.IsProfileSetUp))
     {
-        cd Join-Path $state.GitWorkspacePath "Scripts"
+        Syncro-Status "Setting up Powershell Profile."
+
+        cd (Join-Path $state.GitWorkspacePath "Scripts")
         
         
         

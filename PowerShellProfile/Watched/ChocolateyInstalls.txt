@@ -82,12 +82,5 @@
                       "AppName":  "NuGet.CommandLine",
                       "args":  ""
                   }
-    },
-    {
-        "Id":  21,
-        "Value":  {
-                      "AppName":  "netfx-4.6.2-devpack",
-                      "args":  ""
-                  }
     }
 ]

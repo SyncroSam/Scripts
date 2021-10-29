@@ -30,6 +30,9 @@
                 IsRepositoriesCloned = $false;
                 IsRemainingInstallsComplete = $false;
                 IsProfileSetUp = $false;
+                IsOldDevPacksInstalled = $false;
+                IsDotNet35Enabled = $false;
+                IsWixInstalled = $false;
             }
         }
         
@@ -185,6 +188,27 @@
 	)
     {
         Write-Progress -ParentId 1 -Id 2 -Activity 'Cloning Git repositories' -Status $Message -PercentComplete (($stepNumber / $gitSteps) * 100)
+    }
+    
+    function Download-AndExtractZip($url, $destinationFolder)
+    {
+        $extractedFolderName = [io.path]::GetFileNameWithoutExtension($zipFile)
+        $destination = Join-Path $destinationFolder $extractedFolderName
+
+        $zipFile = Download-File $url
+         
+        $extractShell = New-Object -ComObject Shell.Application 
+        $files = $extractShell.Namespace($zipFile).Items() 
+        $extractShell.NameSpace($destination).CopyHere($files) 
+    }
+
+    function Download-File($url)
+    {
+        $downloadFolder = (New-Object -ComObject Shell.Application).NameSpace('shell:Downloads').Self.Path
+        $filePath = Join-Path $downloadFolder $(Split-Path -Path $url -Leaf) 
+        
+        Invoke-WebRequest -Uri $url -OutFile $filePath 
+        return $filePath
     }
 
     
@@ -450,44 +474,60 @@
     }
     
     # do remaining developer installs
-    # set up $profile
-    Write-ProgressHelper -Message "Verifying Powershell Profile Setup" -StepNumber ($stepCounter++)
+    Write-ProgressHelper -Message "Verifying Development Tools Installed" -StepNumber ($stepCounter++)
     if(!($state.IsRemainingInstallsComplete))
     {
-        Syncro-Status "Fetching required repositories."
+        Syncro-Status "Running Chocolatey Installs."
 
         Run-ChocolateyInstalls -y
         
         $state.IsRemainingInstallsComplete = $true
-        # Save-State $state
+        Save-State $state
+    }
 
+    # dl and extract old .net developer packs
+    Write-ProgressHelper -Message "Verifying Old .Net Developer Packs Installed" -StepNumber ($stepCounter++)
+    if(!($state.IsOldDevPacksInstalled))
+    {
+        Syncro-Status "Downloading and extracting old dev pack zip files."
+
+        $destinationFolder = "C:\Program Files (x86)\Reference Assemblies\Microsoft\Framework\.NETFramework\"
+        Download-AndExtractZip "https://tc.aurelius.pw/redist/dotnet/v4.0.zip" $destinationFolder
+        Download-AndExtractZip "https://tc.aurelius.pw/redist/dotnet/v4.5.zip" $destinationFolder        
+        
+        $state.IsOldDevPacksInstalled = $true
+        Save-State $state
     }
     
+    # enable .net 3.5
+    Write-ProgressHelper -Message "Verifying .Net Framework 3.5 Enbled" -StepNumber ($stepCounter++)
+    if(!($state.IsDotNet35Enabled))
+    {
+        $dotNet35Status = Get-WindowsOptionalFeature -Online | Where-Object -FilterScript {$_.featurename -Like "*netfx3*"}
+        if($dotNet35Status.State -ne "Enabled")
+        {
+            Syncro-Status "Enabling .Net Framework 3.5"
+            Enable-WindowsOptionalFeature -Online -FeatureName "NetFx3" -Source "SourcePath"
+        }
+        
+        $state.IsDotNet35Enabled = $true
+        Save-State $state
+    }
     
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
+    # install wix
+    Write-ProgressHelper -Message "Verifying Wix Installed" -StepNumber ($stepCounter++)
+    if(!($state.IsWixInstalled) -or -not(Is-Installed "wix"))
+    {
+        Syncro-Status "Installing Wix"
+            
+        $wixExe = Download-File "https://github.com/wixtoolset/wix3/releases/download/wix3112rtm/wix311.exe"
+        Start-Process $wixExe
+        
+        Write-Host "Wix Installer executed.  Please note that you will need to install the VS 2019 plugin from the installer as well."
+        Write-Host "You can find the installer in your Downloads folder"
+        
+        $state.IsWixInstalled = $true
+        Save-State $state
+    }
 
 

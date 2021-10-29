@@ -1,6 +1,8 @@
     $ScriptPath = Split-Path -parent $MyInvocation.MyCommand.Definition;
     $ScriptFile = $MyInvocation.MyCommand.Definition
 
+    $statePath = Join-Path $ScriptPath "Syncro-Install.state"
+
     function Test-IsAdmin
     {
         $wid=[System.Security.Principal.WindowsIdentity]::GetCurrent()
@@ -9,12 +11,66 @@
         return $prp.IsInRole($adm)
     }
     
+    function Save-State($state)
+    {
+        $body = ConvertTo-Json $state -Depth 10
+        $output = New-Item -ItemType File -Force -Path $statePath -Value $body
+    }
+    
+    function Get-State()
+    {
+        $state = Get-JsonFromFile $statePath
+        
+        if(!$state)
+        {
+            $state = @{
+                IsSshSet = $false;
+                IsGitWorkspacePathSet = $false;
+                GitWorkspacePath = "C:\Git Workspace";
+                IsRepositoriesCloned = $false;
+            }
+        }
+        
+        return $state
+    }
+    
+    function Get-JsonFromFile([Parameter(Mandatory)][string]$storePath){
+        if (-not (Test-Path $storePath))
+        {
+            $output = New-Item -ItemType File -Force -Path $storePath 
+        }
+        
+        $content = Get-Content $storePath -Raw
+        
+        if(!$content){
+            return
+        }
+        
+        $results = ConvertFrom-Json $content 
+        
+        try{
+            if($results -is [array] -and $results.Count -le 1)
+            {
+                return ,({$results}.Invoke())
+            }
+            else
+            {
+                return {$results}.Invoke()
+            }
+        }
+        catch
+        {
+            Write-Error "Failed trying to invoke file $storePath"
+            throw
+        }
+    }
+    
+    
     function Set-PageantStartup($keyFiles, $keysDirectory)
     {
         if(!$keysDirectory)
         {
-            Write-Host "Are all your keys in the same directory[y/n]?"
-            $sameDirectory = $(Read-Host).Trim()
+            $sameDirectory = $(Read-Host "Are all your keys in the same directory[y/n]?").Trim()
 
             if($sameDirectory.Trim() -eq "y")
             {
@@ -40,7 +96,6 @@
             } while ($path -ne "")
             
         }
-
         $pageant = Get-Command pageant
         $shortcutPath = Join-Path ([Environment]::GetFolderPath('Startup')) "pageant.lnk"  
         
@@ -85,11 +140,11 @@
     
     function Syncro-Status ($status)
     {
+        Write-Host
         Write-Host "*******************************************************************************"
-        Write-Host "                            Syncro Status"
+        Write-Host "    Syncro Status: $status"
         Write-Host "*******************************************************************************"
-        Write-Host $status
-        
+        Write-Host
     }
     
     function Set-Shortcut( [string]$SourceExe, [string]$DestinationPath, [string]$StartIn, $ArgumentList)
@@ -115,11 +170,17 @@
         $Shortcut.Save()
     }
     
+    $state = Get-State
+    
+    Syncro-Status "Beginning Syncro Agent Team development machine setup"
+    
     if(-not(Test-IsAdmin))
     {
         Restart-ScriptInAdmin
     }
 
+    Syncro-Status "Installing Chocolatey and required git packages"
+    
     if(-not(Get-Command "choco" -ErrorAction SilentlyContinue))
     {
         # install chocolatey
@@ -155,26 +216,133 @@
         stop-process -Id $PID
     }
 
-    # important! Ensure the user has set up their SSH keys
-
-    Write-Host "*******************************************************************************"
-    Write-Host "Important!  Now that git has been installed, please make sure you generate"
-    Write-Host "your ssh keys and save them or you will not be able to fetch the repositories."
-    Write-Host "*******************************************************************************"
-
-    Write-Host
-    do{
-        Write-Host "Would you like to go through Pageant key setup (including startup and PATH)?"
-        $setupPageant = (Read-Host "(Type [n] if you would like to set up ssh manually) [y/n]").Trim()
-    } while(-not ($setupPageant -match '^[yn]$'))
-    
-    if($setupPageant -ne "y")
+    if(!($state.IsSshSet))
     {
-        Read-Host "Press enter after you have set up your ssh keys."
-    }
-    else{
-        Set-PageantStartup
-    }
+        # important! Ensure the user has set up their SSH keys
 
+        Write-Host "*******************************************************************************"
+        Write-Host "Important!  Now that git has been installed, please make sure you generate"
+        Write-Host "your ssh keys and save them or you will not be able to fetch the repositories."
+        Write-Host "*******************************************************************************"
+
+        Write-Host
+        do{
+            Write-Host "Would you like to go through Pageant key setup (including startup and PATH)?"
+            $setupPageant = (Read-Host "(If you would like to set up ssh manually, type [n]) [y/n]").Trim()
+        } while(-not ($setupPageant -match '^[yn]$'))
+        
+        if($setupPageant -ne "y")
+        {
+            Read-Host "Press enter after you have set up your ssh keys."
+        }
+        else{
+            Set-PageantStartup
+            $pageantLink = Join-Path ([Environment]::GetFolderPath('Startup')) "pageant.lnk"
+            invoke-item $pageantLink
+        }
+        
+        if($LASTEXITCODE)
+        {
+            Write-Host "An error occured setting up ssh.  Exiting, please inspect the console for details."
+            exit
+        }
+        
+        $state.IsSshSet = $true
+        Save-State $state
+    }
+    
+    # create git workspace
+    if(!($state.IsGitWorkspacePathSet))
+    {
+        Write-Host
+        do{
+            $useDefaultGitFolder = (Read-Host "Use the default workspace directory for git repositories? ($($state.GitWorkspacePath))? [y/n]").Trim()
+        } while(-not ($useDefaultGitFolder -match '^[yn]$'))
+        
+        if($useDefaultGitFolder -eq "n")
+        {
+            do{
+                $state.GitWorkspacePath = (Read-Host "Enter the default git workspace directory you would like to use").Trim()
+                $isPathValid = Test-Path $state.GitWorkspacePath -IsValid
+                
+                if(!$isPathValid)
+                {
+                    Write-Host "Path: '$gitFolder' is not valid."
+                }
+            } while (!$isPathValid)
+        }
+        
+        if (-not (Test-Path $state.GitWorkspacePath))
+        {
+            $output = New-Item -ItemType Directory -Force -Path $state.GitWorkspacePath
+        }
+                
+        if($LASTEXITCODE)
+        {
+            Write-Host "An error occured setting up the git workspace.  Exiting, please inspect the console for details."
+            exit
+        }
+        
+        $state.IsGitWorkspacePathSet = $true
+        Save-State $state
+    }
+    
+    # clone the repositories
+    if(!($state.IsRepositoriesCloned))
+    {
+        cd $state.GitWorkspacePath
+        plink.exe -agent -v git@github.com
+        git clone --recurse-submodules git@github.com:SyncroSam/Scripts.git --progress
+        git clone --recurse-submodules git@github.com:repairtech/kabuto-app.git --progress
+        git clone --recurse-submodules git@github.com:repairtech/kabuto-live-windows.git --progress
+        git clone --recurse-submodules git@github.com:repairtech/kabuto-live-client.git --progress        
+        
+        if($LASTEXITCODE -ne 0)
+        {
+            Write-Host "An error occured fetching main scripts git repository.  Exiting, please inspect the console for details."
+            exit
+        }
+        
+        $state.IsRepositoriesCloned = $true
+        Save-State $state
+    }
+    
+    # set up $profile
+    if(!($state.IsProfileSetUp))
+    {
+        cd Join-Path $state.GitWorkspacePath "Scripts"
+        
+        
+        
+#        . Install-DeveloperEnvironment.ps1
+        
+    }
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
 
 

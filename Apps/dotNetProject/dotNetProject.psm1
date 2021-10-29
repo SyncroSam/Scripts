@@ -534,7 +534,12 @@ function Compare-Git
     }
     else
     {
-        $compareUrl = "$($project.RepositoryUrl)/compare/$baseBranch...$($project.GitUserName):$currentBanch"
+        $userName = ""
+        if($project.GitUserName)
+        {
+            $userName = "$($project.GitUserName):"
+        }
+        $compareUrl = "$($project.RepositoryUrl)/compare/$baseBranch...$userName$currentBanch"
     }
     Start-Process 'chrome.exe' $compareUrl
 

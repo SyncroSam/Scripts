@@ -63,27 +63,6 @@
                   }
     },
     {
-        "Id":  12,
-        "Value":  {
-                      "AppName":  "coretemp",
-                      "args":  ""
-                  }
-    },
-    {
-        "Id":  14,
-        "Value":  {
-                      "AppName":  "gimp",
-                      "args":  ""
-                  }
-    },
-    {
-        "Id":  15,
-        "Value":  {
-                      "AppName":  "grammarly",
-                      "args":  ""
-                  }
-    },
-    {
         "Id":  17,
         "Value":  {
                       "AppName":  "screentogif",
@@ -93,8 +72,8 @@
     {
         "Id":  19,
         "Value":  {
-                      "AppName":  "dotUltimate",
-                      "args":  ""
+                      "AppName":  "visualstudio2019professional",
+                      "args":  "--allWorkloads --includeRecommended --includeOptional --passive --locale en-US"
                   }
     },
     {
@@ -109,13 +88,6 @@
         "Value":  {
                       "AppName":  "netfx-4.6.2-devpack",
                       "args":  ""
-                  }
-    },
-    {
-        "Id":  22,
-        "Value":  {
-                      "AppName":  "visualstudio2019professional",
-                      "args":  "--allWorkloads --includeRecommended --includeOptional --passive --locale en-US"
                   }
     }
 ]

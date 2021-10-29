@@ -28,6 +28,8 @@
                 IsGitWorkspacePathSet = $false;
                 GitWorkspacePath = "C:\Git Workspace";
                 IsRepositoriesCloned = $false;
+                IsRemainingInstallsComplete = $false;
+                IsProfileSetUp = $false;
             }
         }
         
@@ -64,7 +66,6 @@
             throw
         }
     }
-    
     
     function Set-PageantStartup($keyFiles, $keysDirectory)
     {
@@ -170,15 +171,45 @@
         $Shortcut.Save()
     }
     
+    function Write-ProgressHelper (
+	    [int]$stepNumber,
+	    [string]$message
+	)
+    {
+        Write-Progress -Id 1 -Activity 'Setting up Developer Environment' -Status "$Message - Step $stepNumber of $steps" -PercentComplete (($stepNumber / $steps) * 100)
+    }
+    
+    function Write-GitRepositoryProgress(
+	    [int]$stepNumber,
+	    [string]$message
+	)
+    {
+        Write-Progress -ParentId 1 -Id 2 -Activity 'Cloning Git repositories' -Status $Message -PercentComplete (($stepNumber / $gitSteps) * 100)
+    }
+
+    
+    $steps = ([System.Management.Automation.PsParser]::Tokenize((gc "$PSScriptRoot\$($MyInvocation.MyCommand.Name)"), [ref]$null) | where { $_.Type -eq 'Command' -and $_.Content -eq 'Write-ProgressHelper' }).Count
+
+    $gitSteps = ([System.Management.Automation.PsParser]::Tokenize((gc "$PSScriptRoot\$($MyInvocation.MyCommand.Name)"), [ref]$null) | where { $_.Type -eq 'Command' -and $_.Content -eq 'Write-GitRepositoryProgress' }).Count
+
+    $stepCounter = 0
+    $gitStepCounter = 0
+    
     $state = Get-State
     
-    Syncro-Status "Beginning Syncro Agent Team development machine setup"
+    $status = "Beginning Syncro Agent Team development machine setup"
+    Syncro-Status $status
+    $progressId = 1
+    
+    Write-ProgressHelper -Message $status -StepNumber ($stepCounter++)
     
     if(-not(Test-IsAdmin))
     {
         Restart-ScriptInAdmin
     }
     
+    Write-ProgressHelper -Message "Verifying Chocolatey Install" -StepNumber ($stepCounter++)
+
     if(-not(Get-Command "choco" -ErrorAction SilentlyContinue))
     {
         Syncro-Status "Installing Chocolatey and required git packages"
@@ -186,21 +217,32 @@
         # install chocolatey
         Set-ExecutionPolicy Bypass -Scope Process -Force; [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072; iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
     }
+    
+    Write-ProgressHelper -Message "Verifying sudo Install" -StepNumber ($stepCounter++)
+    Syncro-Status "Checking for sudo"
+    if (-not(Get-Command "sudo" -ErrorAction SilentlyContinue))
+    {
+        choco install sudo -y
+    }
 
+    Write-ProgressHelper -Message "Verifying Git Install" -StepNumber ($stepCounter++)
+    Syncro-Status "Checking for git"
     if (-not(Get-Command "git" -ErrorAction SilentlyContinue))
     {
-        Syncro-Status "Checking for git"
         choco install git -y
     }
+
+    Write-ProgressHelper -Message "Verifying pageant Install" -StepNumber ($stepCounter++)
+    Syncro-Status "Checking for pageant"
     if(-not(Get-Command "pageant" -ErrorAction SilentlyContinue))
     {
-        Syncro-Status "Checking for pageant"
         choco install tortoisegit -y
     }
 
+    Write-ProgressHelper -Message "Verifying plink Install" -StepNumber ($stepCounter++)
+    Syncro-Status "Checking for plink"
     if(-not(Get-Command "plink" -ErrorAction SilentlyContinue))
     {
-        Syncro-Status "Checking for plink"
         choco install putty -y
     }
 
@@ -216,6 +258,7 @@
         stop-process -Id $PID
     }
 
+    Write-ProgressHelper -Message "Verifying SSH Setup" -StepNumber ($stepCounter++)
     if(!($state.IsSshSet))
     {
         Syncro-Status "Setting up SSH keys for git."
@@ -259,6 +302,7 @@
     }
     
     # create git workspace
+    Write-ProgressHelper -Message "Verifying Git Workspace Setup" -StepNumber ($stepCounter++)
     if(!($state.IsGitWorkspacePathSet))
     {
         Syncro-Status "Setting up git workspace."
@@ -297,16 +341,28 @@
     }
     
     # clone the repositories
+    Write-ProgressHelper -Message "Verifying Git Repositories" -StepNumber ($stepCounter++)
     if(!($state.IsRepositoriesCloned))
     {
         Syncro-Status "Fetching required repositories."
 
         cd $state.GitWorkspacePath
-        plink.exe -agent -v git@github.com
+        if(Get-Command plink)
+        {
+            plink.exe -agent -v git@github.com
+        }
+        
+        Write-GitRepositoryProgress -message "Cloning Main PS Profile Scripts" -stepNumber ($gitStepCounter++)
         git clone --recurse-submodules git@github.com:SyncroSam/Scripts.git --progress
+        
+        Write-GitRepositoryProgress -message "Cloning kabuto-app" -stepNumber ($gitStepCounter++)
         git clone --recurse-submodules git@github.com:repairtech/kabuto-app.git --progress
+
+        Write-GitRepositoryProgress -message "Cloning kabuto-live-windows" -stepNumber ($gitStepCounter++)
         git clone --recurse-submodules git@github.com:repairtech/kabuto-live-windows.git --progress
-        git clone --recurse-submodules git@github.com:repairtech/kabuto-live-client.git --progress        
+
+        Write-GitRepositoryProgress -message "Cloning kabuto-live-client" -stepNumber ($gitStepCounter++)
+        git clone --recurse-submodules git@github.com:repairtech/kabuto-live-client.git --progress      
         
         if($LASTEXITCODE -ne 0)
         {
@@ -318,17 +374,93 @@
         Save-State $state
     }
     
+    cd (Join-Path $state.GitWorkspacePath "Scripts")
+
     # set up $profile
+    Write-ProgressHelper -Message "Verifying Powershell Profile Setup" -StepNumber ($stepCounter++)
     if(!($state.IsProfileSetUp))
     {
         Syncro-Status "Setting up Powershell Profile."
+        
+        
+        if (!(test-path $profile)) 
+        {
+            New-Item -path $profile -type file -force
+        }
 
-        cd (Join-Path $state.GitWorkspacePath "Scripts")
+        # set up project settings
+        $profilePath = Join-Path $state.GitWorkspacePath "\Scripts\PowerShellProfile\Microsoft.PowerShell_profile.ps1"
         
+        $profileBody = @"
+`$dotNetProjects = @(
+    @{
+        Name = "kabuto-app";
+        MainDirectory ="$($state.GitWorkspacePath)";
+        RepositoryPath ="$($state.GitWorkspacePath)\kabuto-app";
+        BaseRemote = "origin";    # remote for the git repository fetch
+        BaseBranch = "dev";        # the default branch to base new feature branches on
+        PushRemote = "origin";      # default remote to push to
+        SolutionPath = "$($state.GitWorkspacePath)\kabuto-app\Kabuto.sln";
+        RepositoryUrl = "https://github.com/repairtech/kabuto-app"
+        GitUserName = ""
+    },
+    @{
+        Name = "kabuto-live-windows";
+        MainDirectory ="$($state.GitWorkspacePath)";
+        RepositoryPath ="$($state.GitWorkspacePath)\kabuto-live-windows";
+        BaseRemote = "origin";    # remote for the git repository fetch
+        BaseBranch = "dev";        # the default branch to base new feature branches on
+        PushRemote = "origin";      # default remote to push to
+        SolutionPath = "C:\Git Workspace\Syncro\kabuto-live-windows\kabuto-live-windows\KabutoLive.sln";
+        RepositoryUrl = "https://github.com/repairtech/kabuto-live-windows"
+        GitUserName = ""
+    },
+    @{
+        Name = "kabuto-live-client";
+        MainDirectory ="$($state.GitWorkspacePath)";
+        RepositoryPath ="$($state.GitWorkspacePath)\kabuto-live-client";
+        BaseRemote = "origin";    # remote for the git repository fetch
+        BaseBranch = "dev";        # the default branch to base new feature branches on
+        PushRemote = "origin";      # default remote to push to
+        SolutionPath = "$($state.GitWorkspacePath)\kabuto-live-client";
+        RepositoryUrl = "https://github.com/repairtech/kabuto-live-client"
+        GitUserName = ""
+    })
+    
+`$localModules = @(
+    @{
+        Path = "$($state.GitWorkspacePath)\Scripts\Apps\dotNetProject";
+        Name = "dotNetProject";
+        ArgumentList = @('c:', `$dotNetProjects);
+    }
+)
+
+. (Resolve-Path '$profilePath') "C:" `$localModules
+"@
+        Add-Content $profile $profileBody
         
+        # install BurntToast so that we can get notifications from background services
+        Write-Output "Installing BurntToast"
+        Install-Module -Name BurntToast
         
-#        . Install-DeveloperEnvironment.ps1
+        . $PROFILE
         
+        $state.IsProfileSetUp = $true
+        Save-State $state
+    }
+    
+    # do remaining developer installs
+    # set up $profile
+    Write-ProgressHelper -Message "Verifying Powershell Profile Setup" -StepNumber ($stepCounter++)
+    if(!($state.IsRemainingInstallsComplete))
+    {
+        Syncro-Status "Fetching required repositories."
+
+        Run-ChocolateyInstalls -y
+        
+        $state.IsRemainingInstallsComplete = $true
+        # Save-State $state
+
     }
     
     

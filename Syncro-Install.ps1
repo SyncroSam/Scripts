@@ -33,6 +33,7 @@
                 IsOldDevPacksInstalled = $false;
                 IsDotNet35Enabled = $false;
                 IsWixInstalled = $false;
+                IsNugetConfigured = $false;
             }
         }
         
@@ -210,6 +211,61 @@
         return $filePath
     }
 
+    function Get-ObjectHasProperty($object, $propertyName)
+    {
+        return [bool]($object.PSobject.Properties.name -like $propertyName)
+    }
+    Set-Alias HasProperty Get-ObjectHasProperty -Scope Global
+
+    # Based on http://nuts4.net/post/automated-download-and-installation-of-visual-studio-extensions-via-powershell
+    function Install-Vsix([String] $PackageName)
+    {
+        $ErrorActionPreference = "Stop"
+         
+        $baseProtocol = "https:"
+        $baseHostName = "marketplace.visualstudio.com"
+         
+        $Uri = "$($baseProtocol)//$($baseHostName)/items?itemName=$($PackageName)"
+        $VsixLocation = "$($env:Temp)\$([guid]::NewGuid()).vsix"
+         
+        $VSInstallDir = "C:\Program Files (x86)\Microsoft Visual Studio\Installer\resources\app\ServiceHub\Services\Microsoft.VisualStudio.Setup.Service"
+         
+        if (-Not $VSInstallDir) {
+          Write-Error "Visual Studio InstallDir registry key missing"
+          Exit 1
+        }
+         
+        Write-Host "Grabbing VSIX extension at $($Uri)"
+        $HTML = Invoke-WebRequest -Uri $Uri -UseBasicParsing -SessionVariable session
+         
+        Write-Host "Attempting to download $($PackageName)..."
+        $anchor = $HTML.Links |
+        Where-Object { (HasProperty $_ "class") -and $_.class -eq 'install-button-container' } |
+        Select-Object -ExpandProperty href
+
+        if (-Not $anchor) {
+          Write-Error "Could not find download anchor tag on the Visual Studio Extensions page"
+          Exit 1
+        }
+        Write-Host "Anchor is $($anchor)"
+        $href = "$($baseProtocol)//$($baseHostName)$($anchor)"
+        Write-Host "Href is $($href)"
+        Invoke-WebRequest $href -OutFile $VsixLocation -WebSession $session
+         
+        if (-Not (Test-Path $VsixLocation)) {
+          Write-Error "Downloaded VSIX file could not be located"
+          Exit 1
+        }
+        Write-Host "VSInstallDir is $($VSInstallDir)"
+        Write-Host "VsixLocation is $($VsixLocation)"
+        Write-Host "Installing $($PackageName)..."
+        Start-Process -Filepath "$($VSInstallDir)\VSIXInstaller" -ArgumentList "/q /a $($VsixLocation)" -Wait
+         
+        Write-Host "Cleanup..."
+        rm $VsixLocation
+        
+        Write-Host "Installation of $($PackageName) complete!"
+    }
     
     $steps = ([System.Management.Automation.PsParser]::Tokenize((gc "$PSScriptRoot\$($MyInvocation.MyCommand.Name)"), [ref]$null) | where { $_.Type -eq 'Command' -and $_.Content -eq 'Write-ProgressHelper' }).Count
 
@@ -516,6 +572,26 @@
         Save-State $state
     }
     
+    # ensure Nuget source exists
+    Write-ProgressHelper -Message "Verifying Nuget Sources exist Installed" -StepNumber ($stepCounter++)
+    if(!($state.IsNugetConfigured) -or -not(Is-Installed "wix"))
+    {
+        Syncro-Status "Setting up default nuget sources."
+        
+        $nugetBody = "<?xml version=`"1.0`" encoding=`"utf-8`"?>
+<configuration>
+  <packageSources>
+    <add key=`"nuget.org`" value=`"https://api.nuget.org/v3/index.json`" protocolVersion=`"3`" />
+  </packageSources>
+</configuration>"
+        
+        $nugetPath = Join-Path $env:APPDATA "\NuGet\NuGet.Config"        
+        $output = New-Item -ItemType File -Force -Path $nugetPath -Value $nugetBody
+        
+        $state.IsNugetConfigured = $true
+        Save-State $state
+    }
+    
     # install wix
     Write-ProgressHelper -Message "Verifying Wix Installed" -StepNumber ($stepCounter++)
     if(!($state.IsWixInstalled) -or -not(Is-Installed "wix"))
@@ -525,9 +601,13 @@
         $wixExe = Download-File "https://github.com/wixtoolset/wix3/releases/download/wix3112rtm/wix311.exe"
         Start-Process $wixExe
         
-        Write-Host "Wix Installer executed.  Please note that you will need to install the VS 2019 plugin from the installer as well."
-        Write-Host "You can find the installer in your Downloads folder"
-        
+        Write-Host "Wix Installer executed.  Please note that you will need to install the VS 2019 plugin next (scripted)."
+        Write-Host "You can find the installer in your Downloads folder, upon any failure."
+                    
+        Read-Host "Press enter after you have installed Wix."
+
+        Install-Vsix "WixToolset.WixToolsetVisualStudio2019Extension"
+                
         $state.IsWixInstalled = $true
         Save-State $state
     }

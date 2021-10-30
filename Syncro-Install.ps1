@@ -192,10 +192,9 @@
     
     function Download-AndExtractZip($url, $destinationFolder)
     {
+        $zipFile = Download-File $url
         $extractedFolderName = [io.path]::GetFileNameWithoutExtension($zipFile)
         $destination = Join-Path $destinationFolder $extractedFolderName
-
-        $zipFile = Download-File $url
          
         $extractShell = New-Object -ComObject Shell.Application 
         $files = $extractShell.Namespace($zipFile).Items() 
@@ -493,7 +492,10 @@
 
         $destinationFolder = "C:\Program Files (x86)\Reference Assemblies\Microsoft\Framework\.NETFramework\"
         Download-AndExtractZip "https://tc.aurelius.pw/redist/dotnet/v4.0.zip" $destinationFolder
-        Download-AndExtractZip "https://tc.aurelius.pw/redist/dotnet/v4.5.zip" $destinationFolder        
+        Download-AndExtractZip "https://tc.aurelius.pw/redist/dotnet/v4.5.zip" $destinationFolder   
+
+        $dotNet462 = Download-File "https://tc.aurelius.pw/redist/dotnet/NDP462-KB3151800-x86-x64-AllOS-ENU.exe"
+        Start-Process $dotNet462
         
         $state.IsOldDevPacksInstalled = $true
         Save-State $state
@@ -529,5 +531,3 @@
         $state.IsWixInstalled = $true
         Save-State $state
     }
-
-

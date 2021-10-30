@@ -73,7 +73,7 @@
         "Id":  19,
         "Value":  {
                       "AppName":  "visualstudio2019professional",
-                      "args":  "--allWorkloads --includeRecommended --includeOptional --passive --locale en-US"
+                      "args":  "--allWorkloads --includeRecommended --passive --locale en-US"
                   }
     },
     {

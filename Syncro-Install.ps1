@@ -610,4 +610,14 @@
                 
         $state.IsWixInstalled = $true
         Save-State $state
-    }
+    }   
+            Syncro-Status @"
+            
+        Congratulations! Dev machine setup complete!  
+        Next steps:
+         - Run Visual Studio
+         - Enter Telerik nuget credentials
+         - Build project.
+"@
+
+    

@@ -143,6 +143,13 @@
         stop-process -Id $PID
     }
     
+    function Kill-Powershell{
+        Syncro-Status "Powershell session needs to be restarted.  Closing this window, please rerun the install script."
+        Write-Host "Press any key to continue."
+        $k = $host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
+        stop-process -Id $PID
+    }
+    
     function Syncro-Status ($status)
     {
         Write-Host
@@ -331,10 +338,7 @@
         -or -not(Get-Command "pageant" -ErrorAction SilentlyContinue) `
         -or -not(Get-Command "plink" -ErrorAction SilentlyContinue))
     {
-        Syncro-Status "Powershell session needs to be restarted.  Closing this window, please rerun the install script."
-        Write-Host "Press any key to continue."
-        $k = $host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
-        stop-process -Id $PID
+        Kill-Powershell
     }
 
     Write-ProgressHelper -Message "Verifying SSH Setup" -StepNumber ($stepCounter++)
@@ -378,6 +382,8 @@
         
         $state.IsSshSet = $true
         Save-State $state
+        
+        Kill-Powershell
     }
     
     # create git workspace

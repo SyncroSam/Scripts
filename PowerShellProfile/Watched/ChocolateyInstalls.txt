@@ -82,5 +82,12 @@
                       "AppName":  "NuGet.CommandLine",
                       "args":  ""
                   }
+    },
+    {
+        "Id":  21,
+        "Value":  {
+                      "AppName":  "lastpass",
+                      "args":  ""
+                  }
     }
 ]

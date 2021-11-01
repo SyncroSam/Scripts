@@ -207,7 +207,7 @@ function Build(
                 $_ | Write-Highlight -pause:$pause -textsToHighlight "-- failed" 
             }
             
-            Find-SurroundingText -text $buildOutput -regexPattern "(^|\W)(failed$($($keywords | % {"|$_"}) -join ''))" | % {
+            Find-SurroundingText -text $buildOutput -regexPattern "(^|\W)($($keywords | % {"|$_"}) -join '')" | % {
                 $output += $_
             }
             $buildTime = ($(get-date) - $buildStart).Ticks
@@ -232,7 +232,7 @@ function Build(
         
         $keywords = Get-WatchedProjectBuildKeywords $project -keywordsOnly
                 
-        Find-SurroundingText -text $output -regexPattern "(^|\W)(failed$($($keywords | % {"|$_"}) -join ''))" -pause | Write-Highlight -textsToHighlight (@("failed") + $keywords)
+        Find-SurroundingText -text $output -regexPattern "(^|\W)($($keywords | % {"|$_"}) -join '')" -pause | Write-Highlight -textsToHighlight (@$keywords)
         
         Write-Host "Total Elapsed Time: $elapsedTime"
         Write-Host "Finished at: $finishedAt"

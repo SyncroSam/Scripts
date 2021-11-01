@@ -232,7 +232,7 @@ function Build(
         
         $keywords = Get-WatchedProjectBuildKeywords $project -keywordsOnly
                 
-        Find-SurroundingText -text $output -regexPattern "(^|\W)($($keywords | % {"|$_"}) -join '')" -pause | Write-Highlight -textsToHighlight (@$keywords)
+        Find-SurroundingText -text $output -regexPattern "(^|\W)($($keywords | % {"|$_"}) -join '')" -pause | Write-Highlight -textsToHighlight ($keywords)
         
         Write-Host "Total Elapsed Time: $elapsedTime"
         Write-Host "Finished at: $finishedAt"

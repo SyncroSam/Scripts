@@ -124,9 +124,9 @@ function Get-WatchedChocolateyInstalls([string]$storePath = $defaultWatchedChoco
     Get-JsonFromFile $storePath
 }
 
-function Run-ChocolateyInstalls([switch]$y)
+function Run-ChocolateyInstalls($storePath = $defaultWatchedChocolateyInstallPath, [switch]$y)
 {   
-    Get-WatchedChocolateyInstalls | % {
+    Get-WatchedChocolateyInstalls $storePath | % {
         $command = "choco install $($_.Value.AppName)"
         
         if($_.Value.args)
@@ -145,7 +145,7 @@ function Run-ChocolateyInstalls([switch]$y)
 
 function Update-ChocolateyInstalls([switch]$y)
 {
-    Get-WatchedChocolateyInstalls | % {
+    Get-WatchedChocolateyInstalls $storePath | % {
         
         if($y)
         {

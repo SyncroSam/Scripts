@@ -27,21 +27,13 @@ function global:Import($Module, [switch]$silent, $ArgumentList=$null, $path=$nul
     
     if($path -eq $null)
     {
-        $Module = $(Join-Path $global:ScriptPath $Module)
+        $Module = Join-Path $global:ScriptPath $Module
     }
     else {
         $Module = $path
     }
         
-    # if($ArgumentList)
-    # {
-    
     Import-Module -Name:$Module -ArgumentList:$ArgumentList -DisableNameChecking
-    # }
-    # else
-    # {
-        # Import-Module $(Join-Path $global:ScriptPath $Module) -DisableNameChecking
-    # }
     
     if($silent)
     {

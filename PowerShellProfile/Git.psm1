@@ -5,7 +5,7 @@
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
-Import-Module $ScriptPath\Common -DisableNameChecking
+$ScriptPath = Split-Path -Parent $MyInvocation.MyCommand.Definition
 
 function Edit-Git
 {
